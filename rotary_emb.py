@@ -21,12 +21,10 @@ def create_rotation_matrix(embeddings: torch.Tensor):
     theta = lambda x: np.power(10000, -2 * x / embedding_dim)
 
     rotation_matrix = torch.zeros((embedding_dim, embedding_dim), dtype=dtype)
-    for pos, embedding in zip(range(round(embedding_dim / 2)), embeddings):
+    for pos in range(embedding_dim // 2):
         rotation = theta(pos)
         block = create_rotation_block(rotation)
-        rotation_matrix[2 * pos, 2 * pos], rotation_matrix[2 * pos, 2 * pos + 1] = \
-            block[0]
-        rotation_matrix[2 * pos + 1, 2 * pos], rotation_matrix[
-            2 * pos + 1, 2 * pos + 1] = block[1]
+        rotation_matrix[2 * pos:2 * pos + 2, 2 * pos:2 * pos + 2] = block
+
     assert torch.allclose(rotation_matrix[-1][-2:], block[1], atol=1e4)
     return rotation_matrix
