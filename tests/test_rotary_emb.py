@@ -1,11 +1,12 @@
 import numpy as np
 import torch
-from transformers import AutoModelForCausalLM
-
 from rotary_emb import create_rotation_matrix
 
-model_str = "EleutherAI/pythia-14m"
-model = AutoModelForCausalLM.from_pretrained(model_str)
+# from transformers import AutoModelForCausalLM
+# model_str = "EleutherAI/pythia-14m"
+# model = AutoModelForCausalLM.from_pretrained(model_str)
+
+
 data = np.array([
     [1, 2, 3, 4],
     [5, 6, 7, 8],
@@ -25,6 +26,3 @@ def test_rotation_matrix_construction():
         ])
     r_matrix = create_rotation_matrix(embeddings)
     assert torch.allclose(r_matrix, expected_matrix, atol=1e-4)
-
-
-
