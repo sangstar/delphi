@@ -18,6 +18,7 @@ class Config:
 
         self.embeddings = list(self.state_dict.values())[0]
 
+        self.rotary_angle = self.hf_config.rotary_emb_base
         rotary_emb = RotaryEmbeddings(self)
         self.rotary_emb = rotary_emb(self.embeddings)
 

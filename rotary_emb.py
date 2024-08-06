@@ -10,10 +10,10 @@ def create_rotation_block(angle, dtype):
     ], dtype=dtype)
 
 
-def create_rotation_matrix(embeddings: torch.Tensor, dtype):
+def create_rotation_matrix(embeddings: torch.Tensor, dtype, angle=10000):
     seq_length, embedding_dim = embeddings.shape
 
-    theta = lambda x: np.power(10000, -2 * x / embedding_dim)
+    theta = lambda x: np.power(angle, -2 * x / embedding_dim)
 
     rotation_matrix = torch.zeros((embedding_dim, embedding_dim),
                                   dtype=dtype)
@@ -31,5 +31,7 @@ class RotaryEmbeddings:
         self.config = config
 
     def __call__(self, *args, **kwargs):
-        return create_rotation_matrix(*args, **kwargs, dtype=self.config.dtype)
+        return create_rotation_matrix(*args, **kwargs,
+                                      dtype=self.config.dtype,
+                                      angle=self.config.rotary_angle)
 
