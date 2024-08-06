@@ -24,7 +24,7 @@ def test_initialization(model, sample_config):
     assert isinstance(model.transformer, nn.ModuleDict)
     assert isinstance(model.transformer.emb_in, arch.Embedding)
     assert isinstance(model.transformer.h, nn.ModuleList)
-    assert len(model.transformer.h) == len(sample_config.state_dict) - 2
+    assert len(model.transformer.h) == sample_config.num_hidden_layers
     assert isinstance(model.transformer.ln_f, arch.LayerNorm)
     assert isinstance(model.transformer.emb_out, arch.Embedding)
     assert isinstance(model.lm_head, nn.Linear)
