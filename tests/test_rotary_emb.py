@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from architecture.rotary_emb import create_rotation_matrix, create_rotation_block
+from rotary_emb import create_rotation_matrix, create_rotation_block
 import pytest
 
 data = np.array([

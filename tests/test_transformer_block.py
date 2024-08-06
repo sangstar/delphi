@@ -1,7 +1,7 @@
 import pytest
 import torch
 from torch import nn
-from architecture.transformer_block import GPTNeoXAttention
+from architecture import GPTNeoXAttention
 from config import Config
 
 class MockConfig(Config):
