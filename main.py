@@ -1,7 +1,7 @@
 from transformers import AutoModelForCausalLM
 import torch
-from architecture.config import Config
-from architecture.attention import GPTNeoXAttention
+from config import Config
+from architecture.transformer_block import GPTNeoXAttention
 
 
 
