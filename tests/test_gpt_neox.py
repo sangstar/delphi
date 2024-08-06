@@ -6,6 +6,8 @@ from gpt_neox import GPTNeoXModel
 
 model_name = "EleutherAI/pythia-14m"
 
+# TODO: Parametrize these tests for GPU device and different GPT-NeoX models
+
 @pytest.fixture
 def sample_config():
     model = GPTNeoXModel.from_pretrained(model_name)
