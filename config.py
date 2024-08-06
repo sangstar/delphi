@@ -7,14 +7,15 @@ from transformers import GPTNeoXConfig
 @dataclass
 class Config:
     state_dict: OrderedDict[str, torch.Tensor]
-    hf_config: GPTNeoXConfig
+    hf_config: GPTNeoXConfig = None
     device: str = "cpu"
-    dtype: torch.dtype = None
+    dtype: torch.dtype = torch.float32
 
     def __post_init__(self):
         self.dtype = self.hf_config.torch_dtype if self.dtype is None else self.dtype
 
         torch.set_default_dtype(self.dtype)
+        torch.set_default_device(self.device)
 
         self.embeddings = list(self.state_dict.values())[0]
 
