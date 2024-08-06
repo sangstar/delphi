@@ -12,6 +12,9 @@ class GPTNeoXAttention(nn.Module):
 
     def forward(self, x):
         q, k, v = self.attn(x).split(self.config.n_embd, dim=-1)
+
+        # q vector is multiplied by the rotation matrix as per the gpt-neox paper,
+        # so will stand this in for q
         q = q @ self.config.rotary_emb
         y = nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=None)
         return y

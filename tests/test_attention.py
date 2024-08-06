@@ -1,8 +1,8 @@
 import pytest
 import torch
 from torch import nn
-from config import Config
-from attention import GPTNeoXAttention
+from architecture.config import Config
+from architecture.attention import GPTNeoXAttention
 
 
 class MockConfig(Config):
