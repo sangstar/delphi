@@ -9,9 +9,9 @@ class GPTNeoXModel:
     def __init__(self, config):
         self.config = config
 
-        # Subtracts emb_in and emb_out
         self.num_transformer_layers = self.config.num_hidden_layers
 
+        # Load model weights in to arch modules
         self.transformer = nn.ModuleDict(dict(
             emb_in=arch.Embedding(config, "gpt_neox.embed_in"),
             h=nn.ModuleList((arch.TransformerBlock(config, i)) for i in
