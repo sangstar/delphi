@@ -26,7 +26,7 @@ class GPTNeoXModel:
     @classmethod
     def from_pretrained(cls, model_name):
         model = AutoModelForCausalLM.from_pretrained(model_name)
-        config = Config(model.state_dict(), model.config)
+        config = Config(model.state_dict(), model.config, dtype=model.dtype)
         config.state_dict = model.state_dict()
         return cls(config)
 
