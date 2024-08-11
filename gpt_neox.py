@@ -59,39 +59,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
 
-
-class RotaryPositionalEmbeddings(nn.Module):
-    def __init__(self, dim):
-        super().__init__()
-        self.dim = dim
-
-        # Precompute the rotation matrix based on the hyperparameter θ_i
-        inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2).float() / dim))
-        self.register_buffer('inv_freq', inv_freq)
-
-    def forward(self, x):
-        # x: (batch_size, seq_len, num_heads, head_size)
-        seq_len = x.size(1)
-        head_size = x.size(3)
-
-        # Generate sinusoidal frequencies
-        t = torch.arange(seq_len, device=x.device).type_as(self.inv_freq)
-        freqs = torch.einsum('i,j->ij', t, self.inv_freq)  # (seq_len, head_size/2)
-        emb = torch.cat((freqs, freqs), dim=-1)  # (seq_len, head_size)
-
-        # Apply rotary embeddings
-        emb = emb.unsqueeze(1).unsqueeze(0)  # (1, 1, seq_len, head_size)
-        cos_emb = torch.cos(emb)
-        sin_emb = torch.sin(emb)
-        return (x * cos_emb) + (self.rotate_every_two(x) * sin_emb)
-
-    def rotate_every_two(self, x):
-        # This method rotates the tensor by 90 degrees in each 2D subspace
-        x1 = x[..., ::2]
-        x2 = x[..., 1::2]
-        return torch.stack((-x2, x1), dim=-1).reshape_as(x)
-
-
 @dataclass
 class GPTNeoXConfig:
     hidden_size: int
