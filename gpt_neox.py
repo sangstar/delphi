@@ -288,7 +288,7 @@ class GPTNeoX(nn.Module):
             hf_sd["gpt_neox.final_layer_norm.bias"]
         )
 
-        # Set final layer norm weights and biases
+        # Set final embed_out weight
         model.embed_out.weight.copy_(hf_sd["embed_out.weight"])
 
         model.tokenizer = tokenizer
