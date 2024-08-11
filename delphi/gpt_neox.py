@@ -33,6 +33,14 @@ class GPTNeoXConfig:
     rotary_pct: int
     max_position_embeddings: int  # max seq length
 
+    device: torch.device = None
+
+    def __post_init__(self):
+        if not self.device:
+            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        torch.set_default_device(self.device)
+
     @classmethod
     def from_hf(cls, config: transformers.GPTNeoXConfig):
         return GPTNeoXConfig(
