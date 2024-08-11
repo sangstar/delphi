@@ -16,6 +16,31 @@ import transformers
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
+@dataclass
+class GPTNeoXConfig:
+    hidden_size: int
+    num_attention_heads: int
+    intermediate_size: int
+    vocab_size: int
+    num_hidden_layers: int
+    rotary_emb_base: int
+    rotary_pct: int
+    max_position_embeddings: int  # max seq length
+
+    @classmethod
+    def from_hf(cls, config: transformers.GPTNeoXConfig):
+        return GPTNeoXConfig(
+            config.hidden_size,
+            config.num_attention_heads,
+            config.intermediate_size,
+            config.vocab_size,
+            config.num_hidden_layers,
+            config.rotary_emb_base,
+            config.rotary_pct,
+            config.max_position_embeddings,
+        )
+
+
 # From transformers.models.gpt_neox.modeling_gpt_neox
 class GPTNeoXRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
@@ -72,31 +97,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
-
-
-@dataclass
-class GPTNeoXConfig:
-    hidden_size: int
-    num_attention_heads: int
-    intermediate_size: int
-    vocab_size: int
-    num_hidden_layers: int
-    rotary_emb_base: int
-    rotary_pct: int
-    max_position_embeddings: int  # max seq length
-
-    @classmethod
-    def from_hf(cls, config: transformers.GPTNeoXConfig):
-        return GPTNeoXConfig(
-            config.hidden_size,
-            config.num_attention_heads,
-            config.intermediate_size,
-            config.vocab_size,
-            config.num_hidden_layers,
-            config.rotary_emb_base,
-            config.rotary_pct,
-            config.max_position_embeddings,
-        )
 
 
 class GPTNeoXAttention(nn.Module):
@@ -299,7 +299,7 @@ class GPTNeoX(nn.Module):
     def generate(self, prompt, max_new_tokens, temperature=1.0, top_k=None):
         idx = self.tokenizer.encode(prompt, return_tensors="pt")
         for _ in range(max_new_tokens):
-            if idx < self.config.max_position_embeddings:
+            if idx.size()[-1] > self.config.max_position_embeddings:
                 raise ValueError("Prompt exceeds block size")
 
             logits = self(idx)
