@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 from typing import OrderedDict
 import torch
-from rotary_emb import RotaryEmbeddings
 from transformers import GPTNeoXConfig
 
 @dataclass
@@ -17,14 +16,17 @@ class Config:
         torch.set_default_dtype(self.dtype)
         torch.set_default_device(self.device)
 
+        self.seq_length = None
+
         self.embeddings = list(self.state_dict.values())[0]
 
         self.rotary_angle = self.hf_config.rotary_emb_base
-        rotary_emb = RotaryEmbeddings(self)
-        self.rotary_emb = rotary_emb(self.embeddings)
 
         self.n_head = self.hf_config.num_attention_heads
         self.vocab_size = self.hf_config.vocab_size
         self.num_hidden_layers = self.hf_config.num_hidden_layers
+        self.hidden_size = self.hf_config.hidden_size
+        self.intermediate_size = self.hf_config.intermediate_size
         self.n_embd = self.hf_config.hidden_size
+
 
