@@ -13,8 +13,8 @@ Loading a model and generating is as easy as this:
 ```python
 from delphi import GPTNeoX
 
-model_dir = "EleutherAI/pythia-410m"
-model = GPTNeoX.from_pretrained(model_dir)
+model_id = "EleutherAI/pythia-410m"
+model = GPTNeoX.from_pretrained(model_id)
 
 prompt = "The knight drew his sword"
 output = model.generate(prompt, max_new_tokens=50, temperature=1, top_k=50)
