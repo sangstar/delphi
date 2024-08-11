@@ -317,14 +317,3 @@ class GPTNeoX(nn.Module):
             idx = torch.cat((idx, idx_next), dim=1)
 
         return self.tokenizer.decode(idx[0], skip_special_tokens=True)
-
-
-def test_generate():
-    model_dir = "EleutherAI/pythia-160m"
-    model = GPTNeoX.from_pretrained(model_dir)
-    assert model
-
-    prompt = "Once upon a time, "
-    output = model.generate(prompt, max_new_tokens=50, temperature=1, top_k=50)
-    print(output)
-    assert output
