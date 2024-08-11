@@ -1,3 +1,10 @@
+"""
+References:
+    1) HuggingFace's rotary embedding implementation:
+    https://github.com/huggingface/transformers/blob/main/src/transformers/models/gpt_neox/modeling_gpt_neox.py#L573
+    2) Andrej Karpathy's NanoGPT (inspiration and generation function)
+    https://github.com/karpathy/nanoGPT/blob/master/model.py
+"""
 from collections import OrderedDict
 from dataclasses import dataclass
 
@@ -8,7 +15,7 @@ import transformers
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
-# Implementation from transformers.models.gpt_neox.modeling_gpt_neox
+# From transformers.models.gpt_neox.modeling_gpt_neox
 class GPTNeoXRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
@@ -268,28 +275,22 @@ class GPTNeoX(nn.Module):
 
         return model
 
-    # Implementation from https://github.com/karpathy/nanoGPT/blob/master/model.py
     @torch.no_grad()
     def generate(self, prompt, max_new_tokens, temperature=1.0, top_k=None):
         idx = self.tokenizer.encode(prompt, return_tensors="pt")
         for _ in range(max_new_tokens):
-            # if the sequence context is growing too long we must crop it at block_size
-            idx_cond = idx if idx.size(
-                1) <= self.config.max_position_embeddings else idx[:,
-                                                               -self.config.max_position_embeddings:]
-            # forward the model to get the logits for the index in the sequence
-            logits = self(idx_cond)
-            # pluck the logits at the final step and scale by desired temperature
+            if idx < self.config.max_position_embeddings:
+                raise ValueError("Prompt exceeds block size")
+
+            logits = self(idx)
             logits = logits[:, -1, :] / temperature
-            # optionally crop the logits to only the top k options
+
             if top_k is not None:
                 v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
                 logits[logits < v[:, [-1]]] = -float('Inf')
-            # apply softmax to convert logits to (normalized) probabilities
+
             probs = F.softmax(logits, dim=-1)
-            # sample from the distribution
             idx_next = torch.multinomial(probs, num_samples=1)
-            # append sampled index to the running sequence and continue
             idx = torch.cat((idx, idx_next), dim=1)
 
         return self.tokenizer.decode(idx[0], skip_special_tokens=True)
