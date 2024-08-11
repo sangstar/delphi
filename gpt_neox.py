@@ -2,7 +2,7 @@
 An implementation of GPT-NeoX.
 
 References:
-    1) HuggingFace's rotary embedding implementation:
+    1) HuggingFace's rotary embeddings implementation:
     https://github.com/huggingface/transformers/blob/main/src/transformers/models/gpt_neox/modeling_gpt_neox.py#L573
 
     2) Andrej Karpathy's NanoGPT (inspiration, generation method)
