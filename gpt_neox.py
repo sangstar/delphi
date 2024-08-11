@@ -301,6 +301,7 @@ class GPTNeoX(nn.Module):
 
         return model
 
+    # Implementation from https://github.com/karpathy/nanoGPT/blob/master/model.py
     @torch.no_grad()
     def generate(self, prompt, max_new_tokens, temperature=1.0, top_k=None):
         idx = self.tokenizer.encode(prompt, return_tensors="pt")
