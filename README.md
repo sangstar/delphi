@@ -16,17 +16,17 @@ from delphi import GPTNeoX
 model_id = "EleutherAI/pythia-410m"
 model = GPTNeoX.from_pretrained(model_id)
 
-prompt = "The knight drew his sword"
+prompt = "It began to rain heavily"
 output = model.generate(prompt, max_new_tokens=50, temperature=1, top_k=50)
 
 print(output)
 
 '''
-The knight drew his sword from his scabbard. "Good,"
-he said, and the giant's hand moved away from him.
+It began to rain heavily.  A gust of wind swept across their
+faces, and for a moment the two looked like a pair of demons, but then
+came a momentary pause of perfect stillness.
 
-"Let's not fight. I cannot be forced to fight. Will you give me your
-garrison now that he is
+The first light was breaking in upon this dreamlike
 '''
 ```
 
