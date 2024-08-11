@@ -2,7 +2,7 @@
 An implementation of GPT-NeoX.
 
 References:
-    1) HuggingFace's rotary embeddings implementation:
+    1) HuggingFace's rotary embeddings implementation
     https://github.com/huggingface/transformers/blob/main/src/transformers/models/gpt_neox/modeling_gpt_neox.py#L573
 
     2) Andrej Karpathy's NanoGPT (inspiration, generation method)
@@ -324,7 +324,7 @@ def test_generate():
     model = GPTNeoX.from_pretrained(model_dir)
     assert model
 
-    prompt = "The bus was red, but "
+    prompt = "Once upon a time, "
     output = model.generate(prompt, max_new_tokens=50, temperature=1, top_k=50)
     print(output)
     assert output
