@@ -13,20 +13,18 @@ Loading a model and generating is as easy as this:
 ```python
 from delphi import GPTNeoX
 
-model_id = "EleutherAI/pythia-410m"
+model_id = "EleutherAI/pythia-1b"
 model = GPTNeoX.from_pretrained(model_id)
 
-prompt = "It began to rain heavily"
+prompt = "Pythia, high priestess of the Temple"
 output = model.generate(prompt, max_new_tokens=50, temperature=1, top_k=50)
 
 print(output)
 
 '''
-It began to rain heavily.  A gust of wind swept across their
-faces, and for a moment the two looked like a pair of demons, but then
-came a momentary pause of perfect stillness.
+Pythia, high priestess of the Temple of Apollo at Delphi. She would be the object of a Roman poet's dream.
 
-The first light was breaking in upon this dreamlike
+He saw her as an old, wizened woman, bent almost double. She leaned heavily on a pair of sticks. The only part of her body that was
 '''
 ```
 
