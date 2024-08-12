@@ -22,9 +22,11 @@ output = model.generate(prompt, max_new_tokens=50, temperature=1, top_k=50)
 print(output)
 
 '''
-Pythia, high priestess of the Temple of Apollo at Delphi. She would be the object of a Roman poet's dream.
+Pythia, high priestess of the Temple of Apollo at Delphi. She would be the 
+object of a Roman poet's dream.
 
-He saw her as an old, wizened woman, bent almost double. She leaned heavily on a pair of sticks. The only part of her body that was
+He saw her as an old, wizened woman, bent almost double. 
+She leaned heavily on a pair of sticks. The only part of her body that was
 '''
 ```
 
