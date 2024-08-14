@@ -8,7 +8,7 @@ Install the package:
 pip install .
 ```
 
-Loading a model and generating is as easy as this:
+Loading a model and generating is straightforward:
 
 ```python
 from delphi import GPTNeoX
