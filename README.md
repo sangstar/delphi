@@ -1,6 +1,5 @@
 # delphi
 An implementation of an inference service that runs GPT-NeoX models, focusing on simplicity and readability.
-and 
 
 ## Quickstart
 Install the package:
