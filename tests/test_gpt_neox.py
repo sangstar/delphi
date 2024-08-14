@@ -3,6 +3,7 @@ from transformers.models.gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb
 from transformers import AutoConfig, AutoModelForCausalLM
 from delphi.gpt_neox import GPTNeoXConfig, GPTNeoX
 import torch
+import torch.nn.functional as F
 
 model_ref = "EleutherAI/pythia-14m"
 ref_config = AutoConfig.from_pretrained(model_ref)
@@ -246,3 +247,39 @@ def test_forward(example_input, idx):
     ref_logits = ref_model.forward(x_0, inputs_embeds=None).logits
 
     assert torch.allclose(logits, ref_logits, atol=1e-8)
+
+
+def test_kv_cache_reading():
+    # Run forward pass
+    # Confirm that kv caches are updated with processed tokens
+    # Confirm that caches are used
+    # Confirm that kv caches are updated each pass
+
+    # First, check that the kv cache is empty as we've not generated
+
+    example_prompt = "KV cache is a "
+    idx = model.tokenizer.encode(example_prompt, return_tensors="pt")
+    assert model._kv_cache == []
+
+    max_tokens = 15
+
+    for i in range(max_tokens):
+        logits = model(idx)
+
+        assert len(model.config._kv_cache) == len(idx)
+
+        ## Assert that after the first forward pass, only one token is getting its
+        ## QKV vals calculated, coinciding with 1 token generated per forward pass
+
+        ## TODO: What if the same token appears more than once in idx?
+        if i == 1:
+            assert model.transformer.layers[0].attention._qkv_calculations == len(idx)
+        else:
+            assert model.transformer.layers[0].attention._qkv_calculations == 1
+
+        ## Once it's calculated once, at the first layer, shouldn't need to again
+        assert model.transformer.layers[0].attention._qkv_calculations == 0
+
+        probs = F.softmax(logits, dim=-1)
+        idx_next = torch.multinomial(probs, num_samples=1)
+        idx = torch.cat((idx, idx_next), dim=1)
