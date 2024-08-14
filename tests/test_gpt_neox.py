@@ -269,16 +269,16 @@ def test_kv_cache_reading():
         assert len(model.config._kv_cache) == len(idx)
 
         ## Assert that after the first forward pass, only one token is getting its
-        ## QKV vals calculated, coinciding with 1 token generated per forward pass
+        ## KV vals calculated, coinciding with 1 token generated per forward pass
 
         ## TODO: What if the same token appears more than once in idx?
         if i == 1:
-            assert model.transformer.layers[0].attention._qkv_calculations == len(idx)
+            assert model.transformer.layers[0].attention._kv_calculations == len(idx)
         else:
-            assert model.transformer.layers[0].attention._qkv_calculations == 1
+            assert model.transformer.layers[0].attention._kv_calculations == 1
 
         ## Once it's calculated once, at the first layer, shouldn't need to again
-        assert model.transformer.layers[0].attention._qkv_calculations == 0
+        assert model.transformer.layers[0].attention._kv_calculations == 0
 
         probs = F.softmax(logits, dim=-1)
         idx_next = torch.multinomial(probs, num_samples=1)
