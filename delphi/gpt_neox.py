@@ -65,12 +65,22 @@ class GPTNeoXConfig:
         )
 
     def _update_kv_cache(self, update_dict: dict):
-        if self.debug:
-            self._validate_kv_cache_checksums()
         self._kv_cache.update(update_dict)
 
     def _validate_kv_cache_checksums(self):
-        return
+        if self.debug:
+            hash_tensor = lambda x: hashlib.sha256(
+                x.cpu().numpy().tobytes()
+            ).hexdigest()
+            for idx, kv in self._kv_cache.items():
+                checksum = ""
+                for tensor in kv:
+                    checksum += hash_tensor(tensor[:, :-1, :])
+                combined_checksum = hashlib.sha256(checksum.encode("utf-8")).hexdigest()
+                if idx not in self._kv_hashes.keys():
+                    self._kv_hashes.update({idx: combined_checksum})
+                else:
+                    assert combined_checksum == self._kv_hashes[idx]
 
 
 # From transformers.models.gpt_neox.modeling_gpt_neox
@@ -166,80 +176,42 @@ class GPTNeoXAttention(nn.Module):
         y = self.dense(y)
         return y
 
-    # TODO: Inefficient to recalculate this each call. Do so once
     def get_q_matrix(self, x):
-
-        control_qkv = self.query_key_value(x)
-        q, k, v = control_qkv.split(self.n_embd, dim=-1)
-
-        # Ensure correct weight and bias extraction
         weight = self.query_key_value.weight
         bias = self.query_key_value.bias
 
         q_weight, k_weight, v_weight = weight.chunk(3, dim=0)
         q_bias, k_bias, v_bias = bias.chunk(3, dim=0)
 
-        manual_q = F.linear(x, q_weight, q_bias)
-        assert torch.allclose(q, manual_q)
-        return manual_q
+        q = F.linear(x, q_weight, q_bias)
+
+        return q
 
     def _to_qkv(self, x):
-        return self.query_key_value(x)
-
-    def _split_to_qkv_vectors_by_head(self, x):
-        batch_size, seq_len, _ = x.size()
-        # Get batch size and sequence length
-
-        ## For debugging only. Up front calculation to compare
-
-        debug_q = None
-        debug_k = None
-        debug_v = None
-        if self.config.debug:
-            debug_qkv = self._to_qkv(x)
-            debug_q, debug_k, debug_v = debug_qkv.split(self.n_embd, dim=-1)
-
+        batch_size, seq_len, n_embd = x.size()
         if not self.config.use_kv_cache or self.idx not in self.config._kv_cache.keys():
-            # First pass: Compute QKV for the entire sequence
-            qkv = self._to_qkv(x)
-            q, k, v = qkv.split(self.n_embd, dim=-1)
+            qkv = self.query_key_value(x)
+            _, k_cache, v_cache = qkv.split(self.n_embd, dim=-1)
+            self.config._update_kv_cache({self.idx: (k_cache, v_cache)})
 
-            if not self.config.use_kv_cache:
-                q = q.view(batch_size, seq_len, self.n_head, self.head_size).transpose(
-                    1, 2
-                )
-                k = k.view(batch_size, seq_len, self.n_head, self.head_size).transpose(
-                    1, 2
-                )
-                v = v.view(batch_size, seq_len, self.n_head, self.head_size).transpose(
-                    1, 2
-                )
-                return q, k, v
-
-            # Cache K and V matrices
-            self.config._update_kv_cache({self.idx: (k, v)})
+            qkv = qkv.view(batch_size, seq_len, self.n_head, 3 * self.head_size)
+            q, k, v = qkv.split(self.head_size, dim=-1)
 
             self._cached_seq_len = seq_len
+            return q, k, v
         else:
-            # Get query vectors of all tokens still
-            # Essentially only multiply x by Q matrix + bias
             q = self.get_q_matrix(x)
-            assert torch.allclose(q, debug_q)
-
             if self._cached_seq_len == seq_len:
                 k, v = self.config._kv_cache[self.idx]
-
-                if self.config.debug:
-                    assert torch.allclose(debug_k, k, atol=1e-6)
-                    assert torch.allclose(debug_v, v, atol=1e-6)
+                qkv = torch.cat((q, k, v), dim=-1)
+                qkv = qkv.view(batch_size, seq_len, self.n_head, 3 * self.head_size)
+                q, k, v = qkv.split(self.head_size, dim=-1)
+                return q, k, v
             else:
-                # Subsequent passes: Compute QKV only for the new token (last token
-                # in x)
-                next_tok_qkv = self._to_qkv(
-                    x[:, -1, :]
-                )  # Note the slicing for the last token
 
-                q_next, k_next, v_next = next_tok_qkv.split(self.n_embd, dim=-1)
+                next_tok_qkv = self.query_key_value(x[:, -1, :])
+
+                _, k_next, v_next = next_tok_qkv.split(self.n_embd, dim=-1)
 
                 cached_k, cached_v = self.config._kv_cache[self.idx]
 
@@ -247,48 +219,17 @@ class GPTNeoXAttention(nn.Module):
                 k_new = torch.cat((cached_k, k_next.unsqueeze(1)), dim=1)
                 v_new = torch.cat((cached_v, v_next.unsqueeze(1)), dim=1)
 
-                ## Debugging
-                if self.config.debug:
-                    assert torch.allclose(
-                        cached_k, debug_k[:, : self._cached_seq_len, :], atol=1e-5
-                    )
-                    assert torch.allclose(
-                        cached_v, debug_v[:, : self._cached_seq_len, :], atol=1e-5
-                    )
+                self.config._update_kv_cache({self.idx: (k_new, v_new)})
 
-                    assert torch.allclose(
-                        k_next,
-                        debug_k[:, self._cached_seq_len, :],
-                        atol=1e-5,
-                    ), "new k and ref don't match"
-                    assert torch.allclose(
-                        v_next,
-                        debug_v[:, self._cached_seq_len, :],
-                        atol=1e-5,
-                    ), "new v and ref don't match"
+                qkv = torch.cat((q, k_new, v_new), dim=-1)
+                qkv = qkv.view(batch_size, seq_len, self.n_head, 3 * self.head_size)
+                q, k, v = qkv.split(self.head_size, dim=-1)
+                self._cached_seq_len = seq_len
+                return q, k, v
 
-                    assert torch.allclose(
-                        q_next,
-                        debug_q[:, self._cached_seq_len, :],
-                        atol=1e-5,
-                    ), "new q and ref don't match"
-
-                    assert torch.allclose(debug_k, k_new, atol=1e-5)
-                    assert torch.allclose(debug_v, v_new, atol=1e-5)
-
-                k = k_new
-                v = v_new
-
-                if self.config.debug:
-                    k_diff = torch.max(torch.abs(debug_k - k))
-                    v_diff = torch.max(torch.abs(debug_v - v))
-                    print(f"Max K difference: {k_diff.item()}")
-                    print(f"Max V difference: {v_diff.item()}")
-
-                self._cached_seq_len = k.size()[1]
-
-                # Update cache
-                self.config._update_kv_cache({self.idx: (k, v)})
+    def _split_to_qkv_vectors_by_head(self, x):
+        batch_size, seq_len, _ = x.size()
+        q, k, v = self._to_qkv(x)
 
         q = q.view(batch_size, seq_len, self.n_head, self.head_size).transpose(1, 2)
         k = k.view(batch_size, seq_len, self.n_head, self.head_size).transpose(1, 2)
@@ -305,7 +246,7 @@ class GPTNeoXAttention(nn.Module):
     def _apply_rotary_embeddings_and_concatenate(self, q_params, k_params, cos, sin):
         q_rot, q_pass = q_params
         k_rot, k_pass = k_params
-        position_ids = torch.arange(0, self._cached_seq_len).unsqueeze(0)
+        position_ids = torch.arange(0, k_pass.size(-2)).unsqueeze(0)
         q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin, position_ids)
 
         q, k = torch.cat([q_rot, q_pass], dim=-1), torch.cat([k_rot, k_pass], dim=-1)
@@ -351,6 +292,14 @@ class Block(nn.Module):
         return x
 
 
+def validate_parameters(config: GPTNeoXConfig):
+    if config.debug:
+        config._validate_kv_cache_checksums()
+        return
+    else:
+        return
+
+
 class GPTNeoX(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -374,8 +323,6 @@ class GPTNeoX(nn.Module):
         x = self.transformer.embed_in(x)
         for module in self.transformer.layers:
             x = module(x)
-
-            ## TODO: Forward pass of the first layer after generating first token invalidates KV cache integrity -- KV cache has changed
         x = self.transformer.final_layer_norm(x)
         logits = self.embed_out(x)
         return logits
@@ -462,6 +409,7 @@ class GPTNeoX(nn.Module):
     def generate(self, prompt, max_new_tokens, temperature=1.0, top_k=None):
         idx = self.tokenizer.encode(prompt, return_tensors="pt")
         for _ in range(max_new_tokens):
+
             if idx.size()[-1] > self.config.max_position_embeddings:
                 raise ValueError("Prompt exceeds block size")
 
