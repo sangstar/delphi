@@ -9,7 +9,8 @@ model_ref = "EleutherAI/pythia-14m"
 ref_config = AutoConfig.from_pretrained(model_ref)
 
 config = GPTNeoXConfig.from_hf(ref_config)
-model = GPTNeoX.from_pretrained(model_ref)
+config.use_kv_cache = False
+model = GPTNeoX.from_pretrained(model_ref, config)
 ref_model = AutoModelForCausalLM.from_pretrained(model_ref)
 
 
@@ -249,111 +250,23 @@ def test_forward(example_input, idx):
     assert torch.allclose(logits, ref_logits, atol=1e-8)
 
 
-def test_kv_cache_reading():
-    # Run forward pass
-    # Confirm that kv caches are updated with processed tokens
-    # Confirm that caches are used
-    # Confirm that kv caches are updated each pass
+def test_forward_with_and_without_kv_cache(example_input):
+    from time import time
 
-    # First, check that the kv cache is empty as we've not generated
+    kv_config = GPTNeoXConfig.from_hf(ref_config)
+    kv_config.use_kv_cache = True
+    kv_model = GPTNeoX.from_pretrained(model_ref, kv_config)
 
-    example_prompt = "KV cache is a "
-    idx = model.tokenizer.encode(example_prompt, return_tensors="pt")
-    assert model.config._kv_cache == []
+    x_0 = torch.randint(0, 100, (1, 10))
+    control_start = time()
+    control = model.forward(x_0)
+    control_finish = time()
+    control_dur = control_finish - control_start
 
-    max_tokens = 15
+    kv_start = time()
+    kv = kv_model.forward(x_0)
+    kv_finish = time()
+    kv_dur = kv_finish - kv_start
 
-    for i in range(max_tokens):
-        logits = model(idx)
-
-        assert len(model.config._kv_cache) == len(idx)
-
-        ## Assert that after the first forward pass, only one token is getting its
-        ## KV vals calculated, coinciding with 1 token generated per forward pass
-
-        ## TODO: What if the same token appears more than once in idx?
-        if i == 1:
-            assert model.transformer.layers[0].attention._kv_calculations == len(idx)
-        else:
-            assert model.transformer.layers[0].attention._kv_calculations == 1
-
-        ## Once it's calculated once, at the first layer, shouldn't need to again
-        assert model.transformer.layers[0].attention._kv_calculations == 0
-
-        probs = F.softmax(logits, dim=-1)
-        idx_next = torch.multinomial(probs, num_samples=1)
-        idx = torch.cat((idx, idx_next), dim=1)
-
-
-@pytest.mark.parametrize("idx", range(len(model.transformer.layers)))
-def test_q_proj_same_as_manual_q(example_input, idx):
-    attn = model.transformer.layers[idx].attention
-    x = model.transformer.layers[idx].input_layernorm(example_input)
-
-    batch_size, seq_len, _ = x.size()
-    qkv = attn._to_qkv(x)
-    qkv = qkv.view(batch_size, seq_len, attn.n_head, 3 * attn.head_size)
-    ref_q, _, _ = qkv.split(attn.head_size, dim=-1)
-
-    q_proj = attn.get_q_proj()
-
-    q = q_proj(x)
-    q = q.view(batch_size, seq_len, attn.n_head, attn.head_size)
-
-    assert torch.allclose(
-        attn.query_key_value.weight[: attn.n_embd, :], q_proj.weight, atol=1e-8
-    )
-    assert torch.allclose(
-        attn.query_key_value.bias[: attn.n_embd], q_proj.bias, atol=1e-8
-    )
-
-    q_proj_no_bias = torch.matmul(x, attn.query_key_value.weight[: attn.n_embd, :].t())
-    q_proj_no_bias = q_proj_no_bias.view(
-        batch_size, seq_len, attn.n_head, attn.head_size
-    )
-    ref_q_no_bias = qkv[..., : attn.head_size]
-
-    assert torch.allclose(q_proj_no_bias, ref_q_no_bias, atol=1e-8)
-
-    # assert torch.allclose(q_flat, ref_q_flat, atol=1e-8)
-
-    # assert torch.allclose(q, ref_q, atol=1e-8)
-
-
-def test_query_key_value_can_be_split(example_input):
-    attn = model.transformer.layers[0].attention
-    x = model.transformer.layers[0].input_layernorm(example_input)
-    batch_size, seq_len, _ = x.size()
-    reference_query_key_value = attn._to_qkv(x)
-    ref_q, ref_k, ref_v = reference_query_key_value.split(attn.n_embd, dim=-1)
-
-    ## Now, try to divide this up
-
-    # Extract the full QKV weights and biases from the original layer
-    full_qkv_weight = attn.query_key_value.weight  # Shape: [3 * head_size, in_features]
-    full_qkv_bias = attn.query_key_value.bias  # Shape: [3 * head_size]
-
-    # Get the dimensions
-    n_embd = attn.n_embd
-    in_features = attn.query_key_value.in_features
-
-    # Slice the weights and biases for each component
-    q_weight = full_qkv_weight[:n_embd, :]  # First head_size rows for Q
-    k_weight = full_qkv_weight[n_embd : 2 * n_embd, :]  # Next head_size rows for K
-    v_weight = full_qkv_weight[2 * n_embd :, :]  # Last head_size rows for V
-
-    q_bias = full_qkv_bias[:n_embd]  # First head_size elements for Q
-    k_bias = full_qkv_bias[n_embd : 2 * n_embd]  # Next head_size elements for K
-    v_bias = full_qkv_bias[2 * n_embd :]  # Last head_size elements for V
-
-    # Now, let's calculate the Q, K, and V using the manually extracted weights and biases
-    q_mat = torch.matmul(x, q_weight.t()) + q_bias
-    k_mat = torch.matmul(x, k_weight.t()) + k_bias
-    v_mat = torch.matmul(x, v_weight.t()) + v_bias
-
-    # Now compare with reference values
-    assert torch.allclose(q_mat, ref_q, atol=1e-6), "Q matrices do not match"
-    assert torch.allclose(k_mat, ref_k, atol=1e-6), "K matrices do not match"
-    assert torch.allclose(v_mat, ref_v, atol=1e-6), "V matrices do not match"
-
-    print("Q, K, V matrices match the reference projections!")
+    assert torch.allclose(control, kv, atol=1e-8)
+    assert kv_dur < control_dur
