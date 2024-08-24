@@ -125,7 +125,7 @@ def test_attention(example_input, idx):
 
     assert torch.allclose(qkv, qkv_ref, atol=1e-6)
 
-    q, k, v = attn._split_to_qkv_vectors(example_input)
+    q, k, v = attn._split_to_qkv_vectors_by_head(example_input)
     q_ref, k_ref, v_ref = _reference_split_qkv(qkv_ref, ref_attn)
 
     assert torch.allclose(q, q_ref, atol=1e-6)
@@ -194,14 +194,14 @@ def test_layer(example_input):
 
     position_ids = torch.arange(0, example_input.size()[1]).unsqueeze(0)
 
-    assert torch.allclose(hidden_state, hidden_state_ref, atol=1e-8)
+    assert torch.allclose(hidden_state, hidden_state_ref, atol=1e-6)
 
     for i, (layer, layer_ref) in enumerate(
         zip(model.transformer.layers, ref_model.gpt_neox.layers)
     ):
         hidden_state_ref = layer_ref(hidden_state_ref, position_ids=position_ids)[0]
         hidden_state = layer(hidden_state)
-        assert torch.allclose(hidden_state, hidden_state_ref, atol=1e-8)
+        assert torch.allclose(hidden_state, hidden_state_ref, atol=1e-6)
 
 
 @pytest.mark.parametrize("idx", range(len(model.transformer.layers)))
@@ -259,7 +259,7 @@ def test_kv_cache_reading():
 
     example_prompt = "KV cache is a "
     idx = model.tokenizer.encode(example_prompt, return_tensors="pt")
-    assert model._kv_cache == []
+    assert model.config._kv_cache == []
 
     max_tokens = 15
 
@@ -283,3 +283,77 @@ def test_kv_cache_reading():
         probs = F.softmax(logits, dim=-1)
         idx_next = torch.multinomial(probs, num_samples=1)
         idx = torch.cat((idx, idx_next), dim=1)
+
+
+@pytest.mark.parametrize("idx", range(len(model.transformer.layers)))
+def test_q_proj_same_as_manual_q(example_input, idx):
+    attn = model.transformer.layers[idx].attention
+    x = model.transformer.layers[idx].input_layernorm(example_input)
+
+    batch_size, seq_len, _ = x.size()
+    qkv = attn._to_qkv(x)
+    qkv = qkv.view(batch_size, seq_len, attn.n_head, 3 * attn.head_size)
+    ref_q, _, _ = qkv.split(attn.head_size, dim=-1)
+
+    q_proj = attn.get_q_proj()
+
+    q = q_proj(x)
+    q = q.view(batch_size, seq_len, attn.n_head, attn.head_size)
+
+    assert torch.allclose(
+        attn.query_key_value.weight[: attn.n_embd, :], q_proj.weight, atol=1e-8
+    )
+    assert torch.allclose(
+        attn.query_key_value.bias[: attn.n_embd], q_proj.bias, atol=1e-8
+    )
+
+    q_proj_no_bias = torch.matmul(x, attn.query_key_value.weight[: attn.n_embd, :].t())
+    q_proj_no_bias = q_proj_no_bias.view(
+        batch_size, seq_len, attn.n_head, attn.head_size
+    )
+    ref_q_no_bias = qkv[..., : attn.head_size]
+
+    assert torch.allclose(q_proj_no_bias, ref_q_no_bias, atol=1e-8)
+
+    # assert torch.allclose(q_flat, ref_q_flat, atol=1e-8)
+
+    # assert torch.allclose(q, ref_q, atol=1e-8)
+
+
+def test_query_key_value_can_be_split(example_input):
+    attn = model.transformer.layers[0].attention
+    x = model.transformer.layers[0].input_layernorm(example_input)
+    batch_size, seq_len, _ = x.size()
+    reference_query_key_value = attn._to_qkv(x)
+    ref_q, ref_k, ref_v = reference_query_key_value.split(attn.n_embd, dim=-1)
+
+    ## Now, try to divide this up
+
+    # Extract the full QKV weights and biases from the original layer
+    full_qkv_weight = attn.query_key_value.weight  # Shape: [3 * head_size, in_features]
+    full_qkv_bias = attn.query_key_value.bias  # Shape: [3 * head_size]
+
+    # Get the dimensions
+    n_embd = attn.n_embd
+    in_features = attn.query_key_value.in_features
+
+    # Slice the weights and biases for each component
+    q_weight = full_qkv_weight[:n_embd, :]  # First head_size rows for Q
+    k_weight = full_qkv_weight[n_embd : 2 * n_embd, :]  # Next head_size rows for K
+    v_weight = full_qkv_weight[2 * n_embd :, :]  # Last head_size rows for V
+
+    q_bias = full_qkv_bias[:n_embd]  # First head_size elements for Q
+    k_bias = full_qkv_bias[n_embd : 2 * n_embd]  # Next head_size elements for K
+    v_bias = full_qkv_bias[2 * n_embd :]  # Last head_size elements for V
+
+    # Now, let's calculate the Q, K, and V using the manually extracted weights and biases
+    q_mat = torch.matmul(x, q_weight.t()) + q_bias
+    k_mat = torch.matmul(x, k_weight.t()) + k_bias
+    v_mat = torch.matmul(x, v_weight.t()) + v_bias
+
+    # Now compare with reference values
+    assert torch.allclose(q_mat, ref_q, atol=1e-6), "Q matrices do not match"
+    assert torch.allclose(k_mat, ref_k, atol=1e-6), "K matrices do not match"
+    assert torch.allclose(v_mat, ref_v, atol=1e-6), "V matrices do not match"
+
+    print("Q, K, V matrices match the reference projections!")

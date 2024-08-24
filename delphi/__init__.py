@@ -1,3 +1,3 @@
-from delphi.gpt_neox import GPTNeoX
+from delphi.gpt_neox import GPTNeoX, GPTNeoXConfig
 
-__all__ = ["GPTNeoX"]
+__all__ = ["GPTNeoX", "GPTNeoXConfig"]
