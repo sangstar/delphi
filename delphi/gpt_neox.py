@@ -66,21 +66,27 @@ class GPTNeoXConfig:
 
     def _update_kv_cache(self, update_dict: dict):
         self._kv_cache.update(update_dict)
+        if self.debug:
+            idx = list(update_dict.keys())[0]
+            if idx in self._kv_hashes.keys():
+                self._kv_hashes.pop(idx)
 
     def _validate_kv_cache_checksums(self):
+        hash_tensor = lambda x: hashlib.sha256(x.cpu().numpy().tobytes()).hexdigest()
+        for idx, kv in self._kv_cache.items():
+            checksum = ""
+            for tensor in kv:
+                checksum += hash_tensor(tensor[:, :, :])
+            combined_checksum = hashlib.sha256(checksum.encode("utf-8")).hexdigest()
+            if idx not in self._kv_hashes.keys():
+                self._kv_hashes.update({idx: combined_checksum})
+            else:
+                assert combined_checksum == self._kv_hashes[idx]
+
+    def _retrieve_from_kv_cache(self, idx):
         if self.debug:
-            hash_tensor = lambda x: hashlib.sha256(
-                x.cpu().numpy().tobytes()
-            ).hexdigest()
-            for idx, kv in self._kv_cache.items():
-                checksum = ""
-                for tensor in kv:
-                    checksum += hash_tensor(tensor[:, :-1, :])
-                combined_checksum = hashlib.sha256(checksum.encode("utf-8")).hexdigest()
-                if idx not in self._kv_hashes.keys():
-                    self._kv_hashes.update({idx: combined_checksum})
-                else:
-                    assert combined_checksum == self._kv_hashes[idx]
+            self._validate_kv_cache_checksums()
+        return self._kv_cache[idx]
 
 
 # From transformers.models.gpt_neox.modeling_gpt_neox
@@ -202,7 +208,7 @@ class GPTNeoXAttention(nn.Module):
         else:
             q = self.get_q_matrix(x)
             if self._cached_seq_len == seq_len:
-                k, v = self.config._kv_cache[self.idx]
+                k, v = self.config._retrieve_from_kv_cache(self.idx)
                 qkv = torch.cat((q, k, v), dim=-1)
                 qkv = qkv.view(batch_size, seq_len, self.n_head, 3 * self.head_size)
                 q, k, v = qkv.split(self.head_size, dim=-1)
@@ -213,7 +219,7 @@ class GPTNeoXAttention(nn.Module):
 
                 _, k_next, v_next = next_tok_qkv.split(self.n_embd, dim=-1)
 
-                cached_k, cached_v = self.config._kv_cache[self.idx]
+                cached_k, cached_v = self.config._retrieve_from_kv_cache(self.idx)
 
                 # Concatenate cached K, V with new K, V
                 k_new = torch.cat((cached_k, k_next.unsqueeze(1)), dim=1)
@@ -237,7 +243,6 @@ class GPTNeoXAttention(nn.Module):
         return q, k, v
 
     def _get_rotary_params(self, q, k, v):
-        # Apply rotary embeddings to a portion of q and k
         q_rot, q_pass = q[..., : self.rotary_ndims], q[..., self.rotary_ndims :]
         k_rot, k_pass = k[..., : self.rotary_ndims], k[..., self.rotary_ndims :]
         cos, sin = self.rotary_emb(v, seq_len=k.size(-2))
@@ -254,7 +259,6 @@ class GPTNeoXAttention(nn.Module):
 
     def _attention_projections_and_rope(self, x):
         q, k, v = self._split_to_qkv_vectors_by_head(x)
-        # Apply rotary embeddings to a portion of q and k
         q_params, k_params, cos, sin = self._get_rotary_params(q, k, v)
         q, k = self._apply_rotary_embeddings_and_concatenate(
             q_params, k_params, cos, sin
@@ -290,14 +294,6 @@ class Block(nn.Module):
         mlp_output = self.mlp(self.post_attention_layernorm(x))
         x = mlp_output + attn_output + x
         return x
-
-
-def validate_parameters(config: GPTNeoXConfig):
-    if config.debug:
-        config._validate_kv_cache_checksums()
-        return
-    else:
-        return
 
 
 class GPTNeoX(nn.Module):
