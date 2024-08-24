@@ -48,8 +48,7 @@ class GPTNeoXConfig:
 
         if self.use_kv_cache:
             self._kv_cache = {}
-
-        self._kv_hashes = {}
+            self._kv_hashes = {}
 
     @classmethod
     def from_hf(cls, config: transformers.GPTNeoXConfig):
