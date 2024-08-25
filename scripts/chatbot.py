@@ -7,8 +7,8 @@ parser = argparse.ArgumentParser(
     description="A simple GPTNeoX chatbot script.",
     epilog="Note that this is just a silly, primitive script. "
     "GPTNeoX may not be very chat-like unless using "
-    "specifically a chat model with the correctly-dressed"
-    "prompt templates",
+    "specifically a chat model with the correctly-dressed "
+    "prompt templates.",
 )
 parser.add_argument("-r", "--model-ref", default="EleutherAI/pythia-160m")
 parser.add_argument("-t", "--temperature", default=1, type=float)
