@@ -203,16 +203,18 @@ class GPTNeoXAttention(nn.Module):
         else:
             q = self.get_q_matrix(x)
 
-            # This technically calculates the q vector of the last token
-            # an extra time
-            next_tok_qkv = self.query_key_value(x[:, -1, :])
-            _, k_next, v_next = next_tok_qkv.split(self.n_embd, dim=-1)
-
             cached_k, cached_v = self.config._retrieve_from_kv_cache(self.idx)
 
+            tokens_to_calculate = seq_len - cached_k.size(1)
+
+            # This technically calculates the q vector of the last token
+            # extra time(s)
+            next_tok_qkv = self.query_key_value(x[:, -tokens_to_calculate:, :])
+            _, k_next, v_next = next_tok_qkv.split(self.n_embd, dim=-1)
+
             # Concatenate cached K, V with new K, V
-            k_new = torch.cat((cached_k, k_next.unsqueeze(1)), dim=1)
-            v_new = torch.cat((cached_v, v_next.unsqueeze(1)), dim=1)
+            k_new = torch.cat((cached_k, k_next), dim=1)
+            v_new = torch.cat((cached_v, v_next), dim=1)
 
             self.config._update_kv_cache({self.idx: (k_new, v_new)})
 
@@ -390,7 +392,9 @@ class GPTNeoX(nn.Module):
         return model
 
     @torch.no_grad()
-    def generate(self, prompt, max_new_tokens, temperature=1.0, top_k=None):
+    def generate(
+        self, prompt, max_new_tokens, temperature=1.0, top_k=None, stream=False
+    ):
         idx = self.tokenizer.encode(prompt, return_tensors="pt")
         for _ in range(max_new_tokens):
 
@@ -406,6 +410,11 @@ class GPTNeoX(nn.Module):
 
             probs = F.softmax(logits, dim=-1)
             idx_next = torch.multinomial(probs, num_samples=1)
+
             idx = torch.cat((idx, idx_next), dim=1)
+            if idx_next == self.tokenizer.eos_token_id:
+                return self.tokenizer.decode(idx[0], skip_special_tokens=True)
+            if stream:
+                yield idx_next
 
         return self.tokenizer.decode(idx[0], skip_special_tokens=True)
