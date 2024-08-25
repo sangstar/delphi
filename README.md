@@ -46,13 +46,16 @@ Warming up... Ready!
 
 GPTNeoX:
  and highest level tennis player ever and is the first male
- tennis player to win Wimbledon on three consecutive occasions. He won two Grand Slam titles at the event and one additional Wimbledon title, the French Open. Federer
+ tennis player to win Wimbledon on three consecutive occasions. He won two 
+ Grand Slam titles at the event and one additional Wimbledon title, the 
+ French Open. Federer
 
 -> has a rivalry with Nadal
 
 GPTNeoX:
  that dates back to their first year together in 1997.
- Both Federer and Roger Federer are considered to be at the top of men's professional tennis.
+ Both Federer and Roger Federer are considered to be at the top 
+ of men's professional tennis.
 
 History
 
