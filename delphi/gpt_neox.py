@@ -203,6 +203,8 @@ class GPTNeoXAttention(nn.Module):
         else:
             q = self.get_q_matrix(x)
 
+            # This technically calculates the q vector of the last token
+            # an extra time
             next_tok_qkv = self.query_key_value(x[:, -1, :])
             _, k_next, v_next = next_tok_qkv.split(self.n_embd, dim=-1)
 
