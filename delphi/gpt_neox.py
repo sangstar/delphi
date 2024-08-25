@@ -32,13 +32,11 @@ class GPTNeoXConfig:
     num_hidden_layers: int = None
     rotary_emb_base: int = None
     rotary_pct: int = None
-    max_position_embeddings: int = None  # max seq length
+    max_position_embeddings: int = None
     device: torch.device = None
 
     debug: bool = False
     use_kv_cache: bool = True
-
-    _kv_cache: dict = None
 
     def __post_init__(self):
         if not self.device:
@@ -147,7 +145,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
 
 
 class GPTNeoXAttention(nn.Module):
-    def __init__(self, config: GPTNeoXConfig, idx: int):
+    def __init__(self, config: GPTNeoXConfig, idx):
         super().__init__()
         self.config = config
         self.query_key_value = nn.Linear(
@@ -166,7 +164,6 @@ class GPTNeoXAttention(nn.Module):
             base=self.config.rotary_emb_base,
         )
         self.idx = idx
-        self._cached_seq_len = 0
 
         self.query_key_value.requires_grad_(False)
 
@@ -202,35 +199,25 @@ class GPTNeoXAttention(nn.Module):
             qkv = qkv.view(batch_size, seq_len, self.n_head, 3 * self.head_size)
             q, k, v = qkv.split(self.head_size, dim=-1)
 
-            self._cached_seq_len = seq_len
             return q, k, v
         else:
             q = self.get_q_matrix(x)
-            if self._cached_seq_len == seq_len:
-                k, v = self.config._retrieve_from_kv_cache(self.idx)
-                qkv = torch.cat((q, k, v), dim=-1)
-                qkv = qkv.view(batch_size, seq_len, self.n_head, 3 * self.head_size)
-                q, k, v = qkv.split(self.head_size, dim=-1)
-                return q, k, v
-            else:
 
-                next_tok_qkv = self.query_key_value(x[:, -1, :])
+            next_tok_qkv = self.query_key_value(x[:, -1, :])
+            _, k_next, v_next = next_tok_qkv.split(self.n_embd, dim=-1)
 
-                _, k_next, v_next = next_tok_qkv.split(self.n_embd, dim=-1)
+            cached_k, cached_v = self.config._retrieve_from_kv_cache(self.idx)
 
-                cached_k, cached_v = self.config._retrieve_from_kv_cache(self.idx)
+            # Concatenate cached K, V with new K, V
+            k_new = torch.cat((cached_k, k_next.unsqueeze(1)), dim=1)
+            v_new = torch.cat((cached_v, v_next.unsqueeze(1)), dim=1)
 
-                # Concatenate cached K, V with new K, V
-                k_new = torch.cat((cached_k, k_next.unsqueeze(1)), dim=1)
-                v_new = torch.cat((cached_v, v_next.unsqueeze(1)), dim=1)
+            self.config._update_kv_cache({self.idx: (k_new, v_new)})
 
-                self.config._update_kv_cache({self.idx: (k_new, v_new)})
-
-                qkv = torch.cat((q, k_new, v_new), dim=-1)
-                qkv = qkv.view(batch_size, seq_len, self.n_head, 3 * self.head_size)
-                q, k, v = qkv.split(self.head_size, dim=-1)
-                self._cached_seq_len = seq_len
-                return q, k, v
+            qkv = torch.cat((q, k_new, v_new), dim=-1)
+            qkv = qkv.view(batch_size, seq_len, self.n_head, 3 * self.head_size)
+            q, k, v = qkv.split(self.head_size, dim=-1)
+            return q, k, v
 
     def _split_to_qkv_vectors_by_head(self, x):
         batch_size, seq_len, _ = x.size()

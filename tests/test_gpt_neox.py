@@ -1,9 +1,9 @@
 import pytest
+import gc
 from transformers.models.gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb
 from transformers import AutoConfig, AutoModelForCausalLM
 from delphi.gpt_neox import GPTNeoXConfig, GPTNeoX
 import torch
-import torch.nn.functional as F
 
 model_ref = "EleutherAI/pythia-14m"
 ref_config = AutoConfig.from_pretrained(model_ref)
@@ -269,4 +269,37 @@ def test_forward_with_and_without_kv_cache(example_input):
     kv_dur = kv_finish - kv_start
 
     assert torch.allclose(control, kv, atol=1e-8)
+
+
+def test_generate_with_and_without_kv_cache(example_input):
+    from time import time
+
+    model_ref = "EleutherAI/pythia-410m"
+
+    config = GPTNeoXConfig.from_hf(ref_config)
+    config.use_kv_cache = False
+    model = GPTNeoX.from_pretrained(model_ref, config)
+
+    kv_config = GPTNeoXConfig.from_hf(ref_config)
+    kv_config.use_kv_cache = True
+    kv_model = GPTNeoX.from_pretrained(model_ref, kv_config)
+
+    prompt = "Let's see which is faster!"
+
+    control_start = time()
+    control = model.generate(prompt, max_new_tokens=200, temperature=1.2, top_k=50)
+    print(control)
+    control_finish = time()
+    control_dur = control_finish - control_start
+
+    del model
+    gc.collect()
+    torch.cuda.empty_cache()
+
+    kv_start = time()
+    kv = kv_model.generate(prompt, max_new_tokens=200, temperature=1.2, top_k=50)
+    print(kv)
+    kv_finish = time()
+    kv_dur = kv_finish - kv_start
+
     assert kv_dur < control_dur
