@@ -30,3 +30,6 @@ She leaned heavily on a pair of sticks. The only part of her body that was
 '''
 ```
 
+## Additional Features
+The `scripts/` directory has a few example use cases of the `delphi` module, such as a
+chatbot in `chatbot.py`, and a planned API server. 
