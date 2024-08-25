@@ -1,6 +1,7 @@
 from delphi import GPTNeoX, GPTNeoXConfig
 import sys
 import argparse
+import os
 
 parser = argparse.ArgumentParser(
     prog="GPTNeoX Chatbot",
@@ -24,15 +25,20 @@ def main():
     max_new_tokens = args.max_new_tokens
     top_k = args.top_k
 
+    os.system("clear")
+
     sys.stdout.write("Warming up... ")
+    sys.stdout.flush()
+
     config = GPTNeoXConfig(use_kv_cache=True, debug=False)
     model = GPTNeoX.from_pretrained(model_ref, config)
-    sys.stdout.write("Ready!\n")
+    sys.stdout.write("Ready!\n\n")
 
     prompt = ""
     while True:
+        sys.stdout.write("-> ")
         query = input()
-        print("GPTNeoX:")
+        print("\nGPTNeoX:")
         prompt = prompt + query
         output = model.generate(prompt, max_new_tokens, temperature, top_k, True)
         for i in range(max_new_tokens):
